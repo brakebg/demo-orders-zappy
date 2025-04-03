@@ -95,11 +95,14 @@ jobs:
           install_components: gke-gcloud-auth-plugin
 
       - name: Authenticate with GCP
+        env:
+          GCP_PROJECT: ${{ env.PROJECT_ID }}
         run: |
           echo "${{ secrets.GCP_SA_KEY_BASE64 }}" | base64 -d > /tmp/gcp-sa-key.json
           gcloud auth activate-service-account --key-file=/tmp/gcp-sa-key.json
           gcloud config set project ${{ env.PROJECT_ID }}
           gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+          echo "Successfully authenticated with GCP project ${{ env.PROJECT_ID }}"
 
       - name: Set full image name for deployment
         run: |
