@@ -1,14 +1,14 @@
 # Development environment values override
 namespace: demo-orders-zappy
 
-# Using 2 replicas for development environment
-replicaCount: 2
+# Using 1 replica for troubleshooting
+replicaCount: 1
 
-# Enable autoscaling for development environment
+# Disable autoscaling for troubleshooting
 autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 3
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 80
 
 # Enable Ingress for development environment
@@ -25,14 +25,14 @@ ingress:
         - path: /
           pathType: Prefix
 
-# Resource requirements for development environment
+# Resource requirements for development environment - reduced for troubleshooting
 resources:
   limits:
-    cpu: 500m
-    memory: 768Mi
+    cpu: 250m
+    memory: 512Mi
   requests:
-    cpu: 200m
-    memory: 384Mi
+    cpu: 100m
+    memory: 256Mi
 
 # Spring profile for development environment
 springProfile: "dev"
