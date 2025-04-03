@@ -12,10 +12,7 @@ on:
         required: true
         default: 'dev'
         type: choice
-        options:
-          - dev
-          - staging
-          - prod
+        options: [ dev, staging, prod ]
 
 permissions:
   contents: read
@@ -28,13 +25,13 @@ jobs:
     environment: ${{ github.event.inputs.environment || 'dev' }}
     env:
       DOCKER_REGISTRY: ghcr.io
-      GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
       IMAGE_NAME: demo-orders-zappy
       KUBE_NAMESPACE: demo-orders-zappy
       GKE_CLUSTER: demo-orders-cluster
       GKE_ZONE: us-central1
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -46,184 +43,91 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Make mvnw executable
-        run: chmod +x ./mvnw
+      - name: Build and test with Maven
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B clean verify
 
-      - name: Build with Maven
-        run: ./mvnw -B package --file pom.xml
-
-      - name: Run tests
-        run: ./mvnw test
-
-      - name: Upload artifact
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: demo-orders-zappy
           path: target/*.jar
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to GitHub Container Registry
+      - name: Docker login to GHCR
         uses: docker/login-action@v2
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=long
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
+      - name: Build & Push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Make image public
+      - name: Make GHCR image public
         run: |
-          # Extract the image name without the tag
-          IMAGE_NAME_WITHOUT_TAG="${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}"
-          echo "Making image $IMAGE_NAME_WITHOUT_TAG public"
-          
-          # Use GitHub API to make the package public - with correct endpoint and token
-          echo "Using GitHub API to make package public..."
           curl -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GHCR_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/visibility \
-            -d '{"visibility":"public"}' \
-            -v
-          
-          # Verify the package visibility
-          echo "Verifying package visibility..."
-          curl -s \
-            -H "Authorization: Bearer ${{ secrets.GHCR_PAT }}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}
+            -d '{"visibility":"public"}'
 
+      - name: Set up gcloud + GKE auth plugin
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: gke-gcloud-auth-plugin
 
-      # 🔐 Decode and authenticate with GCP service account
-      - name: Write GCP credentials to file
+      - name: Authenticate with GCP
         run: |
           echo "${{ secrets.GCP_SA_KEY_BASE64 }}" | base64 -d > /tmp/gcp-sa-key.json
-
-      - name: Authenticate with Google Cloud
-        run: |
           gcloud auth activate-service-account --key-file=/tmp/gcp-sa-key.json
           gcloud config set project ${{ env.PROJECT_ID }}
           gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
-      - name: Set up kubectl
+      - name: Prepare K8s environment
         run: |
-          # Set the full image name for deployment
-          echo "FULL_IMAGE_NAME=$(echo ${{ steps.meta.outputs.tags }} | cut -d' ' -f1)" >> $GITHUB_ENV
-          
-          # Create namespace if it doesn't exist
-          kubectl create namespace ${KUBE_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create image pull secret for GitHub Container Registry
-        run: |
-          echo "Creating image pull secret for GitHub Container Registry..."
-          
-          # Delete existing secret if it exists
-          kubectl delete secret ghcr-secret -n ${KUBE_NAMESPACE} --ignore-not-found=true
-          
-          # Create new secret with dedicated GHCR token
+          FULL_IMAGE_NAME=$(echo "${{ steps.meta.outputs.tags }}" | cut -d' ' -f1)
+          echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
+          kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl delete secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.repository_owner }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
             --docker-email=${{ github.repository_owner }}@users.noreply.github.com \
-            -n ${KUBE_NAMESPACE}
-          
-          # Verify secret was created
-          kubectl get secret ghcr-secret -n ${KUBE_NAMESPACE} -o yaml | grep -v "password" || echo "Failed to create secret"
+            -n ${{ env.KUBE_NAMESPACE }}
 
-      - name: Debug Kubernetes and Helm
+      - name: Deploy to GKE with Helm
         run: |
-          kubectl get nodes
-          kubectl get pods -A
-          kubectl config view --minify
-          
-          # Check for resource quotas and limit ranges
-          echo "Resource Quotas:"
-          kubectl get resourcequotas -n ${KUBE_NAMESPACE} --no-headers 2>/dev/null || echo "No resource quotas found"
-          
-          echo "Limit Ranges:"
-          kubectl get limitranges -n ${KUBE_NAMESPACE} --no-headers 2>/dev/null || echo "No limit ranges found"
-
-      - name: Deploy to GKE
-        run: |
-          # Debug the values that will be used
-          echo "Image Repository: ${FULL_IMAGE_NAME%:*}"
-          echo "Image Tag: ${FULL_IMAGE_NAME##*:}"
-          echo "Kubernetes Namespace: ${KUBE_NAMESPACE}"
-          echo "Spring Profile: ${{ github.event.inputs.environment || 'dev' }}"
-          
-          # Validate the Helm chart
-          helm lint ./helm/demo-orders-zappy
-          
-          # Install with moderate timeout and wait flags
-          kubectl config set-context --current --request-timeout="3m"
-          
-          # Add a short delay to avoid rate limiting
-          echo "Waiting 3 seconds before deployment to avoid rate limiting..."
-          sleep 3
-          
           helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
-            --namespace ${KUBE_NAMESPACE} \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
             --set image.repository=${FULL_IMAGE_NAME%:*} \
             --set image.tag=${FULL_IMAGE_NAME##*:} \
-            --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
             --set imagePullSecrets[0].name=ghcr-secret \
+            --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
             -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
-            --atomic --timeout 300s --debug --wait-for-jobs \
-            --set serviceAccount.create=false
-
-      - name: Debug pods if deployment fails
-        if: failure()
-        run: |
-          echo "Checking pod status..."
-          kubectl get pods -n ${KUBE_NAMESPACE}
-          
-          echo "Pod details:"
-          kubectl describe pods -n ${KUBE_NAMESPACE}
-          
-          echo "Pod logs:"
-          for pod in $(kubectl get pods -n ${KUBE_NAMESPACE} -l app=demo-orders-zappy -o name); do
-            echo "\n==== Logs for $pod ===="
-            kubectl logs -n ${KUBE_NAMESPACE} $pod || echo "Failed to get logs for $pod"
-          done
+            --atomic --timeout 300s --wait --debug
 
       - name: Verify deployment
         run: |
-          # Add a short delay to avoid rate limiting
-          echo "Waiting 2 seconds before verification to avoid rate limiting..."
-          sleep 2
-          
-          # Check deployment status with timeout
-          kubectl rollout status deployment/demo-orders-zappy -n ${KUBE_NAMESPACE} --timeout=300s
-          
-          # Get deployment details
-          kubectl get deployment demo-orders-zappy -n ${KUBE_NAMESPACE} -o wide
-          
-          # Get service details
-          kubectl get service demo-orders-zappy -n ${KUBE_NAMESPACE}
-          
-          # Get ingress details if available
-          kubectl get ingress -n ${KUBE_NAMESPACE} || echo "No ingress resources found"
+          kubectl rollout status deployment/demo-orders-zappy -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
+          kubectl get deployment demo-orders-zappy -n ${{ env.KUBE_NAMESPACE }} -o wide
+          kubectl get service demo-orders-zappy -n ${{ env.KUBE_NAMESPACE }}
+          kubectl get ingress -n ${{ env.KUBE_NAMESPACE }} || echo "No ingress found"
