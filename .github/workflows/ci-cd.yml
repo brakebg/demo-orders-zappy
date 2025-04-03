@@ -101,29 +101,27 @@ jobs:
           gcloud config set project ${{ env.PROJECT_ID }}
           gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
-      - name: Prepare K8s environment
+      - name: Set full image name for deployment
         run: |
-          # Set the full image name safely
           echo "FULL_IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_ENV
-          # Create namespace if it doesn't exist
-          kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          
-      - name: Create image pull secret for GHCR
+
+      - name: Prepare Kubernetes environment
         run: |
-          kubectl delete secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} --ignore-not-found
+          kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl delete secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.repository_owner }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
-            --docker-email=${{ github.repository_owner }}@users.noreply.github.com \
+            --docker-email=no-reply@github.com \
             -n ${{ env.KUBE_NAMESPACE }}
 
       - name: Deploy to GKE with Helm
         run: |
           helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
             --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.repository=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
+            --set image.repository=${FULL_IMAGE_NAME%:*} \
+            --set image.tag=${FULL_IMAGE_NAME##*:} \
             --set imagePullSecrets[0].name=ghcr-secret \
             --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
             -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
