@@ -27,8 +27,9 @@ jobs:
       GITHUB_REPOSITORY_OWNER: brakebg
       IMAGE_NAME: demo-orders-zappy
       DOCKER_REGISTRY: ghcr.io
-      GKE_CLUSTER: demo-cluster
-      GKE_ZONE: europe-west3-a
+      # Update these values to match your actual GKE cluster configuration
+      GKE_CLUSTER: demo-orders-cluster  # Updated to match your actual cluster name
+      GKE_ZONE: us-central1        # Updated to match your actual cluster zone
       KUBE_NAMESPACE: demo-orders-zappy
       # Set a default project ID in case the secret is not available
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID || secrets.GCP_PROJECT_ID || 'default-project-id' }}
@@ -116,9 +117,24 @@ jobs:
             gcloud auth activate-service-account --key-file=/tmp/gcp-sa-key.json
             # Use the project ID from the environment variable
             gcloud config set project ${{ env.PROJECT_ID }}
-            # Get credentials for the GKE cluster
-            gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
-            echo "Successfully authenticated with GCP project ${{ env.PROJECT_ID }}"
+            
+            # Check if Cloud Resource Manager API is enabled
+            echo "Checking if Cloud Resource Manager API is enabled..."
+            if ! gcloud services list --enabled | grep -q cloudresourcemanager.googleapis.com; then
+              echo "Warning: Cloud Resource Manager API is not enabled. Some GCP operations may fail."
+              echo "Please enable it at: https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview?project=${{ env.PROJECT_ID }}"
+            fi
+            
+            # Try to get credentials for the GKE cluster with error handling
+            echo "Attempting to get credentials for GKE cluster ${{ env.GKE_CLUSTER }} in zone ${{ env.GKE_ZONE }}..."
+            if gcloud container clusters list --zone ${{ env.GKE_ZONE }} | grep -q ${{ env.GKE_CLUSTER }}; then
+              gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+              echo "Successfully authenticated with GCP project ${{ env.PROJECT_ID }} and GKE cluster ${{ env.GKE_CLUSTER }}"
+            else
+              echo "Warning: GKE cluster ${{ env.GKE_CLUSTER }} not found in zone ${{ env.GKE_ZONE }}."
+              echo "Please verify your cluster name and zone in the workflow configuration."
+              exit 1
+            fi
           else
             echo "Warning: GCP_SA_KEY_BASE64 secret is not available. Skipping GCP authentication."
           fi
@@ -150,15 +166,25 @@ jobs:
           kubectl get secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} -o jsonpath='{.metadata.name}' | grep ghcr-secret && echo "Secret created successfully" || echo "Failed to create secret"
 
       - name: Deploy to GKE with Helm
+        if: success()  # Only run if previous steps succeeded
         run: |
-          helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
-            --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
-            --set imagePullSecrets[0].name=ghcr-secret \
-            --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
-            -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
-            --atomic --timeout 300s --wait --debug
+          # Check if kubectl can connect to the cluster
+          if kubectl cluster-info; then
+            echo "Successfully connected to Kubernetes cluster"
+            
+            # Deploy with Helm
+            helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
+              --namespace ${{ env.KUBE_NAMESPACE }} \
+              --set image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }} \
+              --set image.tag=${{ github.sha }} \
+              --set imagePullSecrets[0].name=ghcr-secret \
+              --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
+              -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
+              --atomic --timeout 300s --wait --debug
+          else
+            echo "Error: Cannot connect to Kubernetes cluster. Deployment failed."
+            exit 1
+          fi
 
       - name: Verify deployment
         run: |
