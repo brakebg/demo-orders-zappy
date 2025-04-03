@@ -1,6 +1,12 @@
 # Staging environment values override
 namespace: demo-orders-zappy
 
+# Image configuration
+image:
+  repository: ghcr.io/brakebg/demo-orders-zappy
+  pullPolicy: IfNotPresent
+  tag: latest
+
 # Using 3 replicas for staging environment
 replicaCount: 3
 

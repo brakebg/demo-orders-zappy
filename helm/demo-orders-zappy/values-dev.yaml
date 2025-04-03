@@ -3,7 +3,9 @@ namespace: demo-orders-zappy
 
 # Image configuration
 image:
-  tag: "latest"
+  repository: ghcr.io/brakebg/demo-orders-zappy
+  pullPolicy: IfNotPresent
+  tag: latest
 
 # Service configuration
 service:

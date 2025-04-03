@@ -10,10 +10,10 @@ replicaCount: 3
 
 # Container image configuration
 image:
-  repository: demo-orders-zappy
+  repository: ghcr.io/brakebg/demo-orders-zappy
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: latest
   
 # Spring profile to activate
 springProfile: "kubernetes"
