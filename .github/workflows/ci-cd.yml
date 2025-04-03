@@ -31,7 +31,7 @@ jobs:
       GKE_ZONE: us-central1
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+      GITHUB_REPOSITORY_OWNER: brakebg
 
     steps:
       - uses: actions/checkout@v3
@@ -65,7 +65,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=long
             type=ref,event=branch
@@ -85,7 +85,7 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.GHCR_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/visibility \
+            https://api.github.com/orgs/${{ env.GITHUB_REPOSITORY_OWNER }}/packages/container/${{ env.IMAGE_NAME }}/visibility \
             -d '{"visibility":"public"}'
 
       - name: Set up gcloud + GKE auth plugin
@@ -103,7 +103,7 @@ jobs:
 
       - name: Set full image name for deployment
         run: |
-          echo "FULL_IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_ENV
+          echo "FULL_IMAGE_NAME=ghcr.io/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Prepare Kubernetes environment
         run: |
@@ -111,7 +111,7 @@ jobs:
           kubectl delete secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
-            --docker-username=${{ github.repository_owner }} \
+            --docker-username=${{ env.GITHUB_REPOSITORY_OWNER }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
             --docker-email=no-reply@github.com \
             -n ${{ env.KUBE_NAMESPACE }}
@@ -120,8 +120,8 @@ jobs:
         run: |
           helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
             --namespace ${{ env.KUBE_NAMESPACE }} \
-            --set image.repository=${FULL_IMAGE_NAME%:*} \
-            --set image.tag=${FULL_IMAGE_NAME##*:} \
+            --set image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ github.sha }} \
             --set imagePullSecrets[0].name=ghcr-secret \
             --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
             -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
