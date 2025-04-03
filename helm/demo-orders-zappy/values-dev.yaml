@@ -13,8 +13,8 @@ service:
   port: 80
   targetPort: 8080
 
-# Using 1 replica for troubleshooting
-replicaCount: 1
+# Using 2 replicas for better availability
+replicaCount: 2
 
 # Disable autoscaling for troubleshooting
 autoscaling:
