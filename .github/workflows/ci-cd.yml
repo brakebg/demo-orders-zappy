@@ -173,10 +173,17 @@ jobs:
             echo "Successfully connected to Kubernetes cluster"
             
             # Deploy with Helm
+            # For dev environment, use 'latest' tag; for other environments, use the git SHA
+            if [[ "${{ github.event.inputs.environment || 'dev' }}" == "dev" ]]; then
+              IMAGE_TAG="latest"
+            else
+              IMAGE_TAG="${{ github.sha }}"
+            fi
+            
             helm upgrade --install demo-orders-zappy ./helm/demo-orders-zappy \
               --namespace ${{ env.KUBE_NAMESPACE }} \
               --set image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }} \
-              --set image.tag=${{ github.sha }} \
+              --set image.tag="${IMAGE_TAG}" \
               --set imagePullSecrets[0].name=ghcr-secret \
               --set springProfile=${{ github.event.inputs.environment || 'dev' }} \
               -f ./helm/demo-orders-zappy/values-${{ github.event.inputs.environment || 'dev' }}.yaml \
