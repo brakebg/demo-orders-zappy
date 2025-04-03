@@ -106,15 +106,25 @@ jobs:
           echo "FULL_IMAGE_NAME=ghcr.io/${{ env.GITHUB_REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Prepare Kubernetes environment
+        env:
+          DOCKER_PASSWORD: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          # Create namespace if it doesn't exist
           kubectl create namespace ${{ env.KUBE_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Delete existing secret if it exists
           kubectl delete secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+          
+          # Create Docker registry secret
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.repository_owner }} \
-            --docker-password=${{ secrets.GHCR_PAT }} \
+            --docker-password=$DOCKER_PASSWORD \
             --docker-email=no-reply@github.com \
             -n ${{ env.KUBE_NAMESPACE }}
+          
+          # Verify the secret was created
+          kubectl get secret ghcr-secret -n ${{ env.KUBE_NAMESPACE }} -o jsonpath='{.metadata.name}' | grep ghcr-secret && echo "Secret created successfully" || echo "Failed to create secret"
 
       - name: Deploy to GKE with Helm
         run: |
