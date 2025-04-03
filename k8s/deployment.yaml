@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-orders-zappy
+  namespace: demo-orders-zappy
+spec:
+  replicas: 3  # 3 replicas as requested
+  selector:
+    matchLabels:
+      app: demo-orders-zappy
+  template:
+    metadata:
+      labels:
+        app: demo-orders-zappy
+    spec:
+      containers:
+      - name: demo-orders-zappy
+        image: ${DOCKER_REGISTRY}/demo-orders-zappy:${VERSION}  # Placeholder for CI/CD
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: demo-orders-zappy-config

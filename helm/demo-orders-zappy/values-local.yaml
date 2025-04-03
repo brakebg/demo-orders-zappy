@@ -1,0 +1,34 @@
+# Local development values override
+namespace: demo-orders-zappy
+
+# Using 2 replicas for load balancing testing
+replicaCount: 2
+
+# Disable autoscaling for local development
+autoscaling:
+  enabled: false
+
+# Enable Ingress for local load balancing
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: "orders.local"
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Reduce resource requirements for local development
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Spring profile for local development
+springProfile: "local"

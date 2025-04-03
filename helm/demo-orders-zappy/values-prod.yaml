@@ -1,0 +1,53 @@
+# Production environment values override
+namespace: demo-orders-zappy
+
+# Using 3 replicas for production environment
+replicaCount: 3
+
+# Enable autoscaling for production environment
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Enable Ingress for production environment
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/load-balance: "round_robin"
+    # Enable SSL for production
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Enable rate limiting for production
+    nginx.ingress.kubernetes.io/rate-limit-rps: "10"
+  hosts:
+    - host: "orders.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: orders-tls
+      hosts:
+        - orders.example.com
+
+# Resource requirements for production environment
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Spring profile for production environment
+springProfile: "prod"
+
+# Service account configuration
+serviceAccount:
+  create: false
+  automount: false
+  name: ""

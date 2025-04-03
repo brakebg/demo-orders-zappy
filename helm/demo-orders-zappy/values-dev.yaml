@@ -1,0 +1,44 @@
+# Development environment values override
+namespace: demo-orders-zappy
+
+# Using 2 replicas for development environment
+replicaCount: 2
+
+# Enable autoscaling for development environment
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# Enable Ingress for development environment
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/load-balance: "round_robin"
+  hosts:
+    - host: "dev-orders.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Resource requirements for development environment
+resources:
+  limits:
+    cpu: 500m
+    memory: 768Mi
+  requests:
+    cpu: 200m
+    memory: 384Mi
+
+# Spring profile for development environment
+springProfile: "dev"
+
+# Service account configuration
+serviceAccount:
+  create: false
+  automount: false
+  name: ""

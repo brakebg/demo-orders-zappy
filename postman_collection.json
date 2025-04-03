@@ -1,0 +1,148 @@
+{
+  "info": {
+    "_postman_id": "5e8f8c1a-1e1e-4c1f-9c1a-1e1e4c1f9c1a",
+    "name": "Orders API Collection",
+    "description": "Collection for testing the Orders API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"user\": \"user1@example.com\",\n    \"product\": \"PROD001\",\n    \"quantity\": 2\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/v1/order",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "order"
+          ]
+        },
+        "description": "Creates a new order using the provided order details"
+      },
+      "response": []
+    },
+    {
+      "name": "Create Order - Large Quantity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"user\": \"user2@example.com\",\n    \"product\": \"PROD002\",\n    \"quantity\": 50\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/v1/order",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "order"
+          ]
+        },
+        "description": "Creates a new order with a large quantity to test inventory validation"
+      },
+      "response": []
+    },
+    {
+      "name": "Create Order - Invalid Product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"user\": \"user3@example.com\",\n    \"product\": \"NONEXISTENT\",\n    \"quantity\": 5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/v1/order",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "order"
+          ]
+        },
+        "description": "Attempts to create an order with a non-existent product ID"
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Common tests for all requests",
+          "pm.test(\"Status code is 200 OK or 400 Bad Request\", function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+          "});",
+          "",
+          "// Specific test for successful order creation",
+          "if (pm.response.code === 200) {",
+          "    pm.test(\"Response contains 'order created' message\", function () {",
+          "        pm.expect(pm.response.text()).to.include(\"order created\");",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}

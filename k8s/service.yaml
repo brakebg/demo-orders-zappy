@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-orders-zappy
+  namespace: demo-orders-zappy
+spec:
+  selector:
+    app: demo-orders-zappy
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP  # Use LoadBalancer or NodePort for external access
