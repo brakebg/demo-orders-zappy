@@ -1,6 +1,10 @@
 # Development environment values override
 namespace: demo-orders-zappy
 
+# Image configuration
+image:
+  tag: "latest"
+
 # Using 1 replica for troubleshooting
 replicaCount: 1
 
@@ -33,6 +37,7 @@ resources:
   requests:
     cpu: 100m
     memory: 256Mi
+
 
 # Spring profile for development environment
 springProfile: "dev"
