@@ -2,9 +2,9 @@ name: GCP CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ fresh-branch, main, master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ fresh-branch, main, master ]
   workflow_dispatch:
     inputs:
       environment:
